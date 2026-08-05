@@ -313,6 +313,118 @@ app.delete('/api/dividends/:id', async function(req, res) {
     }
 });
 
+// ─── Debug 页（部署状态诊断）────────────────────
+
+app.get('/', async function(req, res) {
+    var dbStatus = { ok: false, error: '', latencyMs: 0 };
+    var dbStart = Date.now();
+    try {
+        var dbResult = await pool.query('SELECT NOW() as now, current_database() as db, version() as version');
+        dbStatus.ok = true;
+        dbStatus.latencyMs = Date.now() - dbStart;
+        dbStatus.now = dbResult.rows[0].now;
+        dbStatus.db = dbResult.rows[0].db;
+        dbStatus.version = dbResult.rows[0].version;
+    } catch (err) {
+        dbStatus.error = err.message;
+        dbStatus.latencyMs = Date.now() - dbStart;
+    }
+
+    var info = {
+        service: 'NestEgg',
+        version: '1.0.0',
+        node: process.version,
+        platform: process.platform,
+        uptime: Math.round(process.uptime()) + 's',
+        memory: Math.round(process.memoryUsage().rss / 1024 / 1024) + 'MB',
+        env: process.env.VERCEL ? 'Vercel (Production)' : 'Local',
+        vercelRegion: process.env.VERCEL_REGION || 'N/A',
+        db: dbStatus,
+        endpoints: [
+            'GET  /api/health',
+            'GET  /api/holdings',
+            'POST /api/holdings',
+            'GET  /api/transactions',
+            'POST /api/transactions',
+            'GET  /api/dividends',
+            'POST /api/dividends',
+            'GET  /api/user/profile',
+            'POST /api/user/profile',
+            'POST /api/auth/login'
+        ]
+    };
+
+    var html = '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">' +
+        '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+        '<title>NestEgg · 服务状态</title>' +
+        '<style>' +
+        '*{margin:0;padding:0;box-sizing:border-box}' +
+        'body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;' +
+        'background:#F8F4EC;color:#3D3027;padding:24px;min-height:100vh}' +
+        '.card{background:#FFFDF8;border-radius:16px;padding:24px;margin-bottom:16px;' +
+        'box-shadow:0 2px 16px rgba(61,48,39,.06)}' +
+        'h1{font-size:28px;color:#6B8A42;margin-bottom:4px}' +
+        'h2{font-size:16px;color:#8B7D6B;font-weight:400;margin-bottom:20px}' +
+        '.status{display:inline-block;padding:4px 14px;border-radius:6px;font-size:13px;font-weight:600}' +
+        '.ok{background:#E8EDE0;color:#6B8A42}' +
+        '.fail{background:#FDE8E8;color:#C0392B}' +
+        '.grid{display:flex;flex-wrap:wrap;gap:16px;margin-bottom:16px}' +
+        '.item{flex:1;min-width:140px}' +
+        '.item-label{font-size:12px;color:#B8A99A;margin-bottom:2px}' +
+        '.item-val{font-size:18px;font-weight:600}' +
+        'table{width:100%;border-collapse:collapse}' +
+        'td,th{padding:10px 14px;text-align:left;font-size:14px;' +
+        'border-bottom:1px solid #F0ECE4}' +
+        'th{color:#B8A99A;font-weight:500;font-size:12px}' +
+        'td{font-family:monospace;font-size:13px}' +
+        '.endpoint{color:#6B8A42}' +
+        '.db-version{font-size:12px;color:#B8A99A;margin-top:8px;word-break:break-all}' +
+        '</style></head><body>' +
+        '<h1>🥚 NestEgg</h1>' +
+        '<h2>EarnMoney 理财助手 · API 服务诊断</h2>' +
+        '<div class="card">' +
+        '<div class="grid">' +
+        '<div class="item"><div class="item-label">服务状态</div>' +
+        '<div class="item-val"><span class="status ok">● 运行中</span></div></div>' +
+        '<div class="item"><div class="item-label">运行环境</div>' +
+        '<div class="item-val">' + info.env + '</div></div>' +
+        '<div class="item"><div class="item-label">Node 版本</div>' +
+        '<div class="item-val">' + info.node + '</div></div>' +
+        '<div class="item"><div class="item-label">内存占用</div>' +
+        '<div class="item-val">' + info.memory + '</div></div>' +
+        '<div class="item"><div class="item-label">运行时长</div>' +
+        '<div class="item-val">' + info.uptime + '</div></div>' +
+        (info.vercelRegion !== 'N/A' ? '<div class="item"><div class="item-label">Vercel 区域</div>' +
+        '<div class="item-val">' + info.vercelRegion + '</div></div>' : '') +
+        '</div></div>' +
+        '<div class="card">' +
+        '<h2 style="margin-bottom:12px">🗄 数据库连接</h2>' +
+        (dbStatus.ok ?
+        '<div><span class="status ok">● 连接正常</span>' +
+        '<span style="margin-left:12px;font-size:13px;color:#8B7D6B">延迟 ' + dbStatus.latencyMs + 'ms</span></div>' +
+        '<div class="grid" style="margin-top:12px">' +
+        '<div class="item"><div class="item-label">数据库名</div><div class="item-val" style="font-size:15px">' + dbStatus.db + '</div></div>' +
+        '<div class="item"><div class="item-label">服务器时间</div><div class="item-val" style="font-size:15px">' + dbStatus.now + '</div></div>' +
+        '</div>' +
+        '<div class="db-version">' + dbStatus.version + '</div>'
+        :
+        '<div><span class="status fail">● 连接失败</span>' +
+        '<span style="margin-left:12px;font-size:13px;color:#C0392B">' + dbStatus.error + '</span></div>'
+        ) +
+        '</div>' +
+        '<div class="card">' +
+        '<h2 style="margin-bottom:12px">📡 API 端点</h2>' +
+        '<table><tr><th>方法</th><th>路径</th></tr>';
+    for (var i = 0; i < info.endpoints.length; i++) {
+        var parts = info.endpoints[i].split(/\s+/);
+        html += '<tr><td>' + parts[0] + '</td><td class="endpoint">' + parts.slice(1).join(' ') + '</td></tr>';
+    }
+    html += '</table></div></body></html>';
+
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+});
+
 // ─── Health ──────────────────────────────────────
 app.get('/api/health', function(req, res) {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
