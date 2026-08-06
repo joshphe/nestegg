@@ -59,7 +59,7 @@ CREATE INDEX IF NOT EXISTS idx_dividends_holding ON dividends(holding_id);
 CREATE TABLE IF NOT EXISTS users (
     openid      TEXT PRIMARY KEY,
     nickname    TEXT DEFAULT '',
-    avatar_url  TEXT DEFAULT '',
+    avatar      TEXT DEFAULT '',
     create_time TEXT DEFAULT '',
     update_time TEXT DEFAULT ''
 );
