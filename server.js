@@ -313,6 +313,81 @@ app.delete('/api/dividends/:id', async function(req, res) {
     }
 });
 
+// ─── 股票/基金行情代理（解决小程序域名白名单限制）─────
+
+app.get('/api/stock/quote', function(req, res) {
+    var code = (req.query.code || '').trim();
+    if (!code) return res.status(400).json({ error: 'Missing code' });
+
+    // 根据代码前缀判断交易所
+    var prefix = code.charAt(0);
+    if (prefix === '6') code = 'sh' + code;
+    else code = 'sz' + code;
+
+    var url = 'https://hq.sinajs.cn/list=' + code;
+    https.get(url, { headers: { 'Referer': 'https://finance.sina.com.cn' } }, function(sinaRes) {
+        var body = '';
+        sinaRes.on('data', function(chunk) { body += chunk; });
+        sinaRes.on('end', function() {
+            try {
+                var text = String(body);
+                var match = text.match(/"([^"]+)"/);
+                if (!match) return res.status(500).json({ error: 'Parse error' });
+                var arr = match[1].split(',');
+                if (arr.length < 32) return res.status(500).json({ error: 'Data error' });
+                res.json({
+                    name: arr[0],
+                    currentPrice: parseFloat(arr[3]) || 0,
+                    open: parseFloat(arr[1]) || 0,
+                    high: parseFloat(arr[4]) || 0,
+                    low: parseFloat(arr[5]) || 0,
+                    change: parseFloat(arr[31]) || 0,
+                    changePercent: parseFloat(arr[32]) || 0
+                });
+            } catch (e) {
+                res.status(500).json({ error: 'Parse error' });
+            }
+        });
+    }).on('error', function(err) {
+        res.status(500).json({ error: err.message });
+    });
+});
+
+app.get('/api/fund/quote', function(req, res) {
+    var code = (req.query.code || '').trim();
+    if (!code) return res.status(400).json({ error: 'Missing code' });
+
+    var url = 'https://fundmobapi.eastmoney.com/FundMNewApi/FundMNFInfo' +
+        '?plat=Android&appType=ttjj&product=EFund&Version=1&deviceid=wxmp&Fcodes=' + code;
+    https.get(url, function(emRes) {
+        var body = '';
+        emRes.on('data', function(chunk) { body += chunk; });
+        emRes.on('end', function() {
+            try {
+                var data = JSON.parse(body);
+                if (!data.Datas || !data.Datas[0] || !data.Datas[0].SHORTNAME) {
+                    return res.status(500).json({ error: 'Fund not found' });
+                }
+                var d = data.Datas[0];
+                res.json({
+                    code: d.FCODE || '',
+                    name: d.SHORTNAME || '',
+                    nav: parseFloat(d.NAV) || 0,
+                    accNav: parseFloat(d.ACCNAV) || 0,
+                    navChange: parseFloat(d.NAVCHGRT) || 0,
+                    navDate: d.PDATE || '',
+                    estimatedNav: parseFloat(d.GSZ) || 0,
+                    estimatedChange: parseFloat(d.GSZZL) || 0
+                });
+            } catch (e) {
+                res.status(500).json({ error: 'Parse error' });
+            }
+        });
+    }).on('error', function(err) {
+        res.status(500).json({ error: err.message });
+    });
+});
+
 // ─── Debug 页（部署状态诊断）────────────────────
 
 app.get('/', async function(req, res) {
