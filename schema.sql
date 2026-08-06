@@ -1,14 +1,10 @@
--- EarnMoney 理财助手 数据库建表 v2
+-- NestEgg 数据库建表 v2 (非破坏性：仅 CREATE IF NOT EXISTS)
 -- holdings（聚合持仓快照）+ transactions（不可变交易流水）+ dividends（分红）
--- 在 Neon Console 中执行此 SQL，或运行 npm run db:init
-
-DROP TABLE IF EXISTS dividends;
-DROP TABLE IF EXISTS records;
-DROP TABLE IF EXISTS transactions;
-DROP TABLE IF EXISTS holdings;
+-- 全新初始化：npm run db:init
+-- 如需清空重建：先手动 DROP TABLE dividends, transactions, holdings CASCADE;
 
 -- ─── 持仓快照（从 transactions 聚合计算，客户端维护）──────────
-CREATE TABLE holdings (
+CREATE TABLE IF NOT EXISTS holdings (
     id             TEXT PRIMARY KEY,
     user_id        TEXT NOT NULL DEFAULT '',
     category       TEXT NOT NULL DEFAULT 'other',
@@ -24,7 +20,7 @@ CREATE TABLE holdings (
 );
 
 -- ─── 交易流水（不可变，买入/卖出都追加不修改）───────────────
-CREATE TABLE transactions (
+CREATE TABLE IF NOT EXISTS transactions (
     id          TEXT PRIMARY KEY,
     user_id     TEXT NOT NULL DEFAULT '',
     holding_id  TEXT NOT NULL REFERENCES holdings(id) ON DELETE CASCADE,
@@ -38,7 +34,7 @@ CREATE TABLE transactions (
 );
 
 -- ─── 分红记录 ──────────────────────────────────────────────
-CREATE TABLE dividends (
+CREATE TABLE IF NOT EXISTS dividends (
     id          TEXT PRIMARY KEY,
     user_id     TEXT NOT NULL DEFAULT '',
     holding_id  TEXT NOT NULL REFERENCES holdings(id) ON DELETE CASCADE,
