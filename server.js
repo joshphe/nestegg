@@ -319,9 +319,9 @@ app.get('/api/stock/quote', function(req, res) {
     var code = (req.query.code || '').trim();
     if (!code) return res.status(400).json({ error: 'Missing code' });
 
-    // 根据代码前缀判断交易所
+    // 根据代码前缀判断交易所：6、5 开头为上海，其余深圳
     var prefix = code.charAt(0);
-    if (prefix === '6') code = 'sh' + code;
+    if (prefix === '6' || prefix === '5') code = 'sh' + code;
     else code = 'sz' + code;
 
     var url = 'https://hq.sinajs.cn/list=' + code;
