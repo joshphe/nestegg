@@ -1,8 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const https = require('https');
+const http = require('http');
 const crypto = require('crypto');
-const iconv = require('iconv-lite');
 const { pool } = require('./db');
 
 const app = express();
@@ -481,7 +481,7 @@ app.get('/api/stock/quote', function(req, res) {
   if (!code) return res.status(400).json({ error: 'Missing code' });
   if (!validateCode(code)) return res.status(400).json({ error: 'Invalid code format' });
 
-  // 根据代码前缀判断交易所：6、5 开头为上海，其余深圳
+  // 腾讯行情接口 (sqt.gtimg.cn)，UTF-8 编码，国内外均可访问
   var prefix = code.charAt(0);
   if (prefix === '6' || prefix === '5') code = 'sh' + code;
   else code = 'sz' + code;
@@ -490,26 +490,25 @@ app.get('/api/stock/quote', function(req, res) {
   var cached = getCached(cacheKey);
   if (cached) return res.json(cached);
 
-  var url = 'https://hq.sinajs.cn/list=' + code;
+  var url = 'http://sqt.gtimg.cn/utf8/q=' + code;
   var timedOut = false;
-  var req = https.get(url, { timeout: 8000, headers: { 'Referer': 'https://finance.sina.com.cn' } }, function(sinaRes) {
-    var chunks = [];
-    sinaRes.on('data', function(chunk) { chunks.push(chunk); });
-    sinaRes.on('end', function() {
+  var req = http.get(url, { timeout: 8000, headers: { 'Referer': 'https://gu.qq.com' } }, function(tencentRes) {
+    var body = '';
+    tencentRes.on('data', function(chunk) { body += chunk; });
+    tencentRes.on('end', function() {
       if (timedOut) return;
       try {
-        var buffer = Buffer.concat(chunks);
-        var text = iconv.decode(buffer, 'gbk');
-        var match = text.match(/"([^"]+)"/);
+        // 格式: v_sh600519="51~贵州茅台~600519~1850.00~..."
+        var match = body.match(/"([^"]+)"/);
         if (!match) return res.status(500).json({ error: 'Data error' });
-        var arr = match[1].split(',');
-        if (arr.length < 33) return res.status(500).json({ error: 'Data error' });
+        var arr = match[1].split('~');
+        if (arr.length < 35) return res.status(500).json({ error: 'Data error' });
         var quoteData = {
-          name: arr[0],
+          name: arr[1] || '',
           currentPrice: parseFloat(arr[3]) || 0,
-          open: parseFloat(arr[1]) || 0,
-          high: parseFloat(arr[4]) || 0,
-          low: parseFloat(arr[5]) || 0,
+          open: parseFloat(arr[5]) || 0,
+          high: parseFloat(arr[33]) || 0,
+          low: parseFloat(arr[34]) || 0,
           change: parseFloat(arr[31]) || 0,
           changePercent: parseFloat(arr[32]) || 0
         };
