@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const https = require('https');
 const crypto = require('crypto');
+const iconv = require('iconv-lite');
 const { pool } = require('./db');
 
 const app = express();
@@ -491,11 +492,13 @@ app.get('/api/stock/quote', function(req, res) {
 
   var url = 'https://hq.sinajs.cn/list=' + code;
   https.get(url, { timeout: 10000, headers: { 'Referer': 'https://finance.sina.com.cn' } }, function(sinaRes) {
-    var body = '';
-    sinaRes.on('data', function(chunk) { body += chunk; });
+    var chunks = [];
+    sinaRes.on('data', function(chunk) { chunks.push(chunk); });
     sinaRes.on('end', function() {
       try {
-        var text = String(body);
+        // Sina 返回 GBK 编码，需用 iconv-lite 解码
+        var buffer = Buffer.concat(chunks);
+        var text = iconv.decode(buffer, 'gbk');
         var match = text.match(/"([^"]+)"/);
         if (!match) return res.status(500).json({ error: 'Data error' });
         var arr = match[1].split(',');
