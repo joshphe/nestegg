@@ -491,12 +491,13 @@ app.get('/api/stock/quote', function(req, res) {
   if (cached) return res.json(cached);
 
   var url = 'https://hq.sinajs.cn/list=' + code;
-  https.get(url, { timeout: 10000, headers: { 'Referer': 'https://finance.sina.com.cn' } }, function(sinaRes) {
+  var timedOut = false;
+  var req = https.get(url, { timeout: 8000, headers: { 'Referer': 'https://finance.sina.com.cn' } }, function(sinaRes) {
     var chunks = [];
     sinaRes.on('data', function(chunk) { chunks.push(chunk); });
     sinaRes.on('end', function() {
+      if (timedOut) return;
       try {
-        // Sina 返回 GBK 编码，需用 iconv-lite 解码
         var buffer = Buffer.concat(chunks);
         var text = iconv.decode(buffer, 'gbk');
         var match = text.match(/"([^"]+)"/);
@@ -518,8 +519,14 @@ app.get('/api/stock/quote', function(req, res) {
         handleError(res, e, 'Stock quote parse');
       }
     });
-  }).on('error', function(err) {
-    handleError(res, err, 'Stock quote request');
+  });
+  req.on('timeout', function() {
+    timedOut = true;
+    req.destroy();
+    res.status(504).json({ error: 'Upstream timeout' });
+  });
+  req.on('error', function(err) {
+    if (!timedOut) handleError(res, err, 'Stock quote request');
   });
 });
 
@@ -534,10 +541,12 @@ app.get('/api/fund/quote', function(req, res) {
 
   var url = 'https://fundmobapi.eastmoney.com/FundMNewApi/FundMNFInfo' +
       '?plat=Android&appType=ttjj&product=EFund&Version=1&deviceid=wxmp&Fcodes=' + code;
-  https.get(url, { timeout: 10000 }, function(emRes) {
+  var timedOut = false;
+  var req = https.get(url, { timeout: 8000 }, function(emRes) {
     var body = '';
     emRes.on('data', function(chunk) { body += chunk; });
     emRes.on('end', function() {
+      if (timedOut) return;
       try {
         var data = JSON.parse(body);
         if (!data.Datas || !data.Datas[0] || !data.Datas[0].SHORTNAME) {
@@ -560,8 +569,14 @@ app.get('/api/fund/quote', function(req, res) {
         handleError(res, e, 'Fund quote parse');
       }
     });
-  }).on('error', function(err) {
-    handleError(res, err, 'Fund quote request');
+  });
+  req.on('timeout', function() {
+    timedOut = true;
+    req.destroy();
+    res.status(504).json({ error: 'Upstream timeout' });
+  });
+  req.on('error', function(err) {
+    if (!timedOut) handleError(res, err, 'Fund quote request');
   });
 });
 
